@@ -1,0 +1,70 @@
+This tool retrieves the full execution history of a Temporal workflow. The result is a chronological sequence of structured events, each with a type, timestamp, and event-specific parameters. Use this information to understand what the workflow was doing at each step, and to help debug errors, timeouts, and logic bugs.
+
+The history includes events such as activity scheduling, signal receipt, workflow completion, and errors. Each event may include structured data fields — typically JSON — that describe what was sent, received, or scheduled.
+
+### Key Event Types and Parameters
+
+1. **WorkflowExecutionStarted**
+   - `input`: The arguments passed to the workflow function. Typically a JSON-encoded structure.
+
+2. **ActivityTaskScheduled**
+   - `activity_type`: The name of the activity being scheduled.
+   - `input`: The JSON-encoded input for the activity. Important for understanding the request.
+   - `task_queue`: The queue used to dispatch the activity.
+
+3. **ActivityTaskStarted / Completed / Failed / TimedOut**
+   - Represents lifecycle of an activity.
+   - Look at the original input (from `Scheduled`) and `result` or `failure` details.
+
+4. **WorkflowExecutionSignaled**
+   - `signal_name`: The name of the signal sent to the workflow.
+   - `input`: JSON-encoded data sent with the signal.
+   - Used to inject external events into the workflow. Signals can change workflow behavior.
+
+5. **WorkflowExecutionUpdateAccepted**
+   - `accepted_request`: Contains an `input` field with JSON input for the update.
+   - Often used for dynamic configuration or patching.
+
+6. **TimerStarted / TimerFired**
+   - Represents delays or timeouts.
+   - `timer_id` and `timeout` parameters indicate purpose and duration.
+
+7. **ChildWorkflowExecutionStarted / Completed / Failed**
+   - Nested workflow calls.
+   - Contains child `workflow_id`, `workflow_type`, and `input`.
+
+8. **MarkerRecorded**
+   - Used for custom metadata or side effects.
+   - Marker `name` and `details` can help trace specific conditions.
+
+9. **WorkflowExecutionCompleted / Failed / Canceled / ContinuedAsNew**
+   - Final states.
+   - `result` or `failure` will indicate outcome.
+   - `continued_execution_run_id` will appear if the workflow continued.
+
+### How to Interpret Inputs
+
+Many parameters in these events (such as `input`, `accepted_request.input`, or `result`) are encoded in JSON. These will typically reflect application-specific payloads — for example, an order ID, task description, or configuration. Understanding these inputs is crucial to reconstructing intent.
+
+For each event:
+- Look at the event `type`
+- Review important parameters (especially `input` and `signal_name`)
+- Decode JSON payloads to understand the business logic
+- Consider context from prior events
+
+### Usage
+
+Call this tool with:
+- `"workflow_id"`: Required — the ID of the Temporal workflow.
+- `"run_id"`: Optional — if omitted, the latest run will be retrieved.
+
+Use this tool to diagnose:
+- Why an activity or signal failed or was ignored
+- What input caused a workflow to fail or produce unexpected output
+- How external events (like signals or updates) affected behavior
+- What the sequence of business logic decisions was
+
+The output will be a JSON array of events. Each event includes:
+- `event_id`, `type`, `timestamp`
+- Key parameters (`input`, `result`, `signal_name`, etc.)
+- A flattened and readable format, ready for LLM reasoning.
