@@ -2,16 +2,17 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
-	"os"
-
+	mcp_golang "github.com/metoro-io/mcp-golang"
+	"github.com/metoro-io/mcp-golang/transport/stdio"
 	"github.com/robryanx/mcp-temporal-server/internal/config"
 	"github.com/robryanx/mcp-temporal-server/internal/handler"
 	"github.com/robryanx/mcp-temporal-server/internal/temporal"
-
-	mcp_golang "github.com/metoro-io/mcp-golang"
-	"github.com/metoro-io/mcp-golang/transport/stdio"
 )
+
+//go:embed instructions.txt
+var instructions []byte
 
 func main() {
 	ctx := context.Background()
@@ -31,6 +32,8 @@ func main() {
 			return nil, err
 		}
 
+		history.Instructions = string(instructions)
+
 		jsonData, err := json.Marshal(history)
 		if err != nil {
 			return nil, err
@@ -42,14 +45,12 @@ func main() {
 		panic(err)
 	}
 
-	err = server.RegisterResource("test://resource", "guide", "Guide for understanding workflow histories", "text/plain", func() (*mcp_golang.ResourceResponse, error) {
-		contents, err := os.ReadFile("instructions.txt")
-		if err != nil {
-			panic(err)
-		}
-
-		return mcp_golang.NewResourceResponse(mcp_golang.NewTextEmbeddedResource("test://resource", string(contents), "text/plain")), nil
+	err = server.RegisterResource("file://instructions", "instructions", "Instructions for understanding workflow histories", "text/plain", func() (*mcp_golang.ResourceResponse, error) {
+		return mcp_golang.NewResourceResponse(mcp_golang.NewTextEmbeddedResource("file://instructions", string(instructions), "text/plain")), nil
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	err = server.Serve()
 	if err != nil {

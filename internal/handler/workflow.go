@@ -25,10 +25,11 @@ type Event struct {
 }
 
 type HistoryResponse struct {
-	WorkflowID string  `json:"workflow_id"`
-	RunID      string  `json:"run_id"`
-	Summary    string  `json:"summary"`
-	Events     []Event `json:"events"`
+	WorkflowID   string  `json:"workflow_id"`
+	RunID        string  `json:"run_id"`
+	Summary      string  `json:"summary"`
+	Instructions string  `json:"instructionsForReadingEvents"`
+	Events       []Event `json:"events"`
 }
 
 func GetWorkflowHistoryHandler(ctx context.Context, temporalClient client.Client, args WorkflowHistoryArgs) (HistoryResponse, error) {
@@ -44,9 +45,11 @@ func GetWorkflowHistoryHandler(ctx context.Context, temporalClient client.Client
 		rawEvents = append(rawEvents, evt)
 	}
 
-	formatted := make([]Event, len(rawEvents))
-	for i, e := range rawEvents {
-		formatted[i] = FormatEvent(e)
+	formattedList := make([]Event, 0, len(rawEvents))
+	for _, e := range rawEvents {
+		if formatted, keep := FormatEvent(e); keep {
+			formattedList = append(formattedList, formatted)
+		}
 	}
 
 	finalRunID := runID
@@ -57,12 +60,12 @@ func GetWorkflowHistoryHandler(ctx context.Context, temporalClient client.Client
 	return HistoryResponse{
 		WorkflowID: args.WorkflowID,
 		RunID:      finalRunID,
-		Summary:    fmt.Sprintf("Workflow has %d events.", len(formatted)),
-		Events:     formatted,
+		Summary:    fmt.Sprintf("Workflow has %d events. We are examining %d events.", len(rawEvents), len(formattedList)),
+		Events:     formattedList,
 	}, nil
 }
 
-func FormatEvent(e *history.HistoryEvent) Event {
+func FormatEvent(e *history.HistoryEvent) (Event, bool) {
 	details := make(map[string]interface{})
 
 	switch attr := e.Attributes.(type) {
@@ -104,6 +107,14 @@ func FormatEvent(e *history.HistoryEvent) Event {
 	case *history.HistoryEvent_TimerStartedEventAttributes:
 		details["timer_id"] = attr.TimerStartedEventAttributes.GetTimerId()
 		details["timeout"] = attr.TimerStartedEventAttributes.GetStartToFireTimeout().String()
+
+	case *history.HistoryEvent_WorkflowTaskFailedEventAttributes:
+		if attr.WorkflowTaskFailedEventAttributes.Failure != nil {
+			details["error"] = attr.WorkflowTaskFailedEventAttributes.Failure.Message + "\n" + attr.WorkflowTaskFailedEventAttributes.Failure.StackTrace
+		}
+
+	default:
+		return Event{}, false
 	}
 
 	return Event{
@@ -111,7 +122,7 @@ func FormatEvent(e *history.HistoryEvent) Event {
 		Type:      e.GetEventType().String(),
 		Timestamp: e.GetEventTime().UTC().Format(time.RFC3339),
 		Details:   details,
-	}
+	}, true
 }
 
 func extractJSON(payload *common.Payloads, out *map[string]interface{}) {
