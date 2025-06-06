@@ -4,8 +4,10 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	mcp_golang "github.com/metoro-io/mcp-golang"
-	"github.com/metoro-io/mcp-golang/transport/stdio"
+	"log"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/robryanx/mcp-temporal-server/internal/config"
 	"github.com/robryanx/mcp-temporal-server/internal/handler"
 	"github.com/robryanx/mcp-temporal-server/internal/temporal"
@@ -15,47 +17,59 @@ import (
 var instructions []byte
 
 func main() {
-	ctx := context.Background()
-
-	done := make(chan struct{})
-
 	cfg := config.Load()
 	tClient, err := temporal.NewTemporalClient(cfg)
 	if err != nil {
 		panic(err)
 	}
 
-	server := mcp_golang.NewServer(stdio.NewStdioServerTransport())
-	err = server.RegisterTool("workflow_history", "Retrieve a workflow history", func(arguments handler.WorkflowHistoryArgs) (*mcp_golang.ToolResponse, error) {
-		history, err := handler.GetWorkflowHistoryHandler(ctx, tClient, arguments)
+	s := server.NewMCPServer(
+		"Temporal MCP Server",
+		"1.0.0",
+		server.WithToolCapabilities(true),
+		server.WithResourceCapabilities(true, false),
+		server.WithInstructions(string(instructions)),
+	)
+
+	// Define the workflow_history tool schema
+	tool := mcp.NewTool("workflow_history",
+		mcp.WithDescription("Retrieve a workflow history"),
+		mcp.WithString("workflow_id", mcp.Required(), mcp.Description("The ID of the workflow to retrieve")),
+		mcp.WithString("run_id", mcp.Description("Optional run ID of the workflow")),
+	)
+
+	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		workflowID, err := req.RequireString("workflow_id")
 		if err != nil {
-			return nil, err
+			return mcp.NewToolResultError("Missing required workflow_id"), nil
 		}
-
+		runID := req.GetString("run_id", "")
+		args := handler.WorkflowHistoryArgs{WorkflowID: workflowID, RunID: runID}
+		history, err := handler.GetWorkflowHistoryHandler(ctx, tClient, args)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
 		history.Instructions = string(instructions)
-
 		jsonData, err := json.Marshal(history)
 		if err != nil {
-			return nil, err
+			return mcp.NewToolResultError("Failed to marshal history"), nil
 		}
-
-		return mcp_golang.NewToolResponse(mcp_golang.NewTextContent(string(jsonData))), nil
+		return mcp.NewToolResultText(string(jsonData)), nil
 	})
-	if err != nil {
-		panic(err)
-	}
 
-	err = server.RegisterResource("file://instructions", "instructions", "Instructions for understanding workflow histories", "text/plain", func() (*mcp_golang.ResourceResponse, error) {
-		return mcp_golang.NewResourceResponse(mcp_golang.NewTextEmbeddedResource("file://instructions", string(instructions), "text/plain")), nil
+	// Add instructions as a resource
+	resource := mcp.NewResource("file://instructions", "instructions", mcp.WithMIMEType("text/plain"))
+	s.AddResource(resource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				URI:      "file://instructions",
+				MIMEType: "text/plain",
+				Text:     string(instructions),
+			},
+		}, nil
 	})
-	if err != nil {
-		panic(err)
-	}
 
-	err = server.Serve()
-	if err != nil {
-		panic(err)
+	if err := server.ServeStdio(s); err != nil {
+		log.Fatalf("Server error: %v", err)
 	}
-
-	<-done
 }
