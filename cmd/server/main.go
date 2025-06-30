@@ -57,6 +57,24 @@ func main() {
 		return mcp.NewToolResultText(string(jsonData)), nil
 	})
 
+	// Define the failed_workflows tool schema
+	failedWorkflowsTool := mcp.NewTool("failed_workflows",
+		mcp.WithDescription("Retrieve a list of workflows that are currently failing"),
+	)
+
+	s.AddTool(failedWorkflowsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		failedWorkflows, err := handler.GetFailedWorkflowsHandler(ctx, tClient)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		jsonData, err := json.Marshal(failedWorkflows)
+		if err != nil {
+			return mcp.NewToolResultError("Failed to marshal failed workflows"), nil
+		}
+		return mcp.NewToolResultText(string(jsonData)), nil
+	})
+
 	// Add instructions as a resource
 	resource := mcp.NewResource("file://instructions", "instructions", mcp.WithMIMEType("text/plain"))
 	s.AddResource(resource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
