@@ -1,4 +1,3 @@
-// Package testworkflows contains all test workflow and activity implementations.
 package testworkflows
 
 import (
@@ -10,13 +9,13 @@ import (
 )
 
 // TestWorkflow is a simple workflow for testing purposes.
-func TestWorkflow(ctx workflow.Context, name string) (string, error) {
+func SimpleWorkflow(ctx workflow.Context, name string) (string, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("TestWorkflow started", "name", name)
 
 	// Panic if the name is "panic"
 	if name == "panic" {
-		panic("TestWorkflow: intentional panic triggered by input name 'panic'")
+		panic("SimpleWorkflow: intentional panic triggered by input name 'panic'")
 	}
 
 	activityOptions := workflow.ActivityOptions{

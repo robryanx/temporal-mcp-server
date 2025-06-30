@@ -33,7 +33,7 @@ func main() {
 	w := worker.New(c, "test-task-queue", worker.Options{})
 
 	// Register all test workflows here
-	w.RegisterWorkflow(testworkflows.TestWorkflow)
+	w.RegisterWorkflow(testworkflows.SimpleWorkflow)
 	w.RegisterActivity(testworkflows.TestActivity)
 
 	// Start workflows in a goroutine, then run the worker in the main goroutine (blocking)
@@ -54,7 +54,7 @@ func main() {
 			var we client.WorkflowRun
 			switch *workflowName {
 			case "test":
-				we, err = c.ExecuteWorkflow(context.Background(), workflowOptions, testworkflows.TestWorkflow, inputVal)
+				we, err = c.ExecuteWorkflow(context.Background(), workflowOptions, testworkflows.SimpleWorkflow, inputVal)
 			default:
 				fmt.Printf("Unknown workflow: %s\n", *workflowName)
 				continue
