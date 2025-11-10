@@ -18,8 +18,9 @@ import (
 func main() {
 	workflowName := flag.String("workflow", "test", "Name of the workflow to start (e.g. 'test')")
 	count := flag.Int("count", 1, "Number of workflows to start")
-	input := flag.String("input", "test", "Input string for the workflow")
-	failures := flag.Float64("failures", 0.1, "Percentage (0.0-1.0) of workflows that should fail when input is 'random'")
+	name := flag.String("name", "test", "Name for the workflow input")
+	failurePercent := flag.Float64("failure_percent", 0.1, "Percentage (0.0-1.0) of workflows that should fail")
+	waitPercent := flag.Float64("wait_percent", 0.1, "Percentage (0.0-1.0) of workflows that should wait")
 	flag.Parse()
 
 	cfg := config.Load()
@@ -45,16 +46,24 @@ func main() {
 				TaskQueue: "test-task-queue",
 			}
 
-			// Use the -failures flag to determine failure rate if input is "random"
-			inputVal := *input
-			if *input == "random" && rand.Float64() < *failures {
-				inputVal = "panic"
+			// Determine the action based on percentages
+			var workflowAction testworkflows.Action
+			randVal := rand.Float64()
+			if randVal < *failurePercent {
+				workflowAction = testworkflows.Panic
+			} else if randVal < *failurePercent+*waitPercent {
+				workflowAction = testworkflows.Wait
+			}
+
+			input := testworkflows.SimpleWorkflowInput{
+				Name:   *name,
+				Action: workflowAction,
 			}
 
 			var we client.WorkflowRun
 			switch *workflowName {
 			case "test":
-				we, err = c.ExecuteWorkflow(context.Background(), workflowOptions, testworkflows.SimpleWorkflow, inputVal)
+				we, err = c.ExecuteWorkflow(context.Background(), workflowOptions, testworkflows.SimpleWorkflow, input)
 			default:
 				fmt.Printf("Unknown workflow: %s\n", *workflowName)
 				continue
